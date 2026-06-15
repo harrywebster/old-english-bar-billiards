@@ -118,11 +118,15 @@
   /* ---------- overlays ---------- */
   .overlay{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;background:rgba(4,20,16,.84);backdrop-filter:blur(3px);}
   .overlay.show{display:flex;}
-  #confirm{z-index:30;} #end{z-index:20;align-items:flex-start;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+  #confirm,#soundPicker{z-index:30;} #end{z-index:20;align-items:flex-start;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 
   .dialog{background:linear-gradient(180deg,#163d35,#0b251f);border:1px solid var(--brass);border-radius:14px;padding:24px 22px;max-width:340px;width:100%;text-align:center;box-shadow:0 18px 50px rgba(0,0,0,.6);}
   .dialog p{font-size:1rem;line-height:1.45;margin:0 0 20px;color:var(--ivory);}
   .dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .dialog-title{font-family:"Oswald",sans-serif;text-transform:uppercase;letter-spacing:.16em;font-size:.78rem;color:var(--brass);margin:0 0 14px;}
+  .pack-list{display:flex;flex-direction:column;gap:8px;margin-bottom:10px;}
+  .pack-opt{text-align:center;}
+  .pack-opt.sel{background:linear-gradient(180deg,#caa54e,#9c7c2e);color:#1a1205;border-color:var(--brass-bright);font-weight:600;}
 
   .end-card{background:linear-gradient(180deg,#163d35,#0b251f);border:1px solid var(--brass);border-radius:16px;padding:24px 20px;max-width:760px;width:100%;margin:auto;box-shadow:0 18px 50px rgba(0,0,0,.6),inset 0 0 24px rgba(201,162,75,.1);}
   .end-card .crown{font-size:.7rem;letter-spacing:.3em;text-transform:uppercase;color:var(--brass);font-family:"Oswald",sans-serif;text-align:center;}
@@ -210,7 +214,7 @@
     </div>
     <button class="ctrl primary big" id="startBtn">Start match</button>
   </div>
-  <p class="build">Build v7 &middot; 2026-06-15</p>
+  <p class="build">Build v8 &middot; 2026-06-15</p>
 </div>
 
 <!-- ===================== GAME SCREEN ===================== -->
@@ -282,6 +286,14 @@
   </div>
 </div>
 
+<div class="overlay" id="soundPicker">
+  <div class="dialog">
+    <p class="dialog-title">Sound theme</p>
+    <div class="pack-list" id="packList"></div>
+    <button class="ctrl primary" id="pickerDone" style="width:100%;margin-top:4px;">Done</button>
+  </div>
+</div>
+
 <div class="overlay" id="end">
   <div class="end-card">
     <p class="crown">Game</p>
@@ -339,11 +351,49 @@
     function aUndo(t){sq(523,t,0.07,0.20);sq(370,t+0.07,0.12,0.20);}
     function aRack(t){[392,523,659,784].forEach((f,i)=>sq(f,t+i*0.05,0.06,0.20));}
     function aWin(t0){const seq=[[523,0.10],[659,0.10],[784,0.10],[1047,0.22],[880,0.10],[1047,0.32]];let t=t0;seq.forEach(([f,d])=>{sq(f,t,d,0.22);t+=d;});}
-    function playB(n,t){({click:bClick,pot:bPot,foul:bFoul,tap:bTap,undo:bUndo,rack:bRack,win:bWin}[n]||function(){})(t);if(n==='inoff'){bClick(t);bPot(t+0.07);}}
-    function playA(n,t){({click:aJump,pot:aBlip,foul:aFoul,tap:aTap,undo:aUndo,rack:aRack,win:aWin}[n]||function(){})(t);if(n==='inoff'){aJump(t);aBlip(t+0.16);}}
-    function play(name){if(!on||!ensure())return;const t=ctx.currentTime+0.001;(pack==='arcade'?playA:playB)(name,t);}
+    /* shared primitives for themed packs */
+    function mkOsc(type,f,t,dur,peak,bendTo){const o=ctx.createOscillator();o.type=type;o.frequency.setValueAtTime(f,t);if(bendTo)o.frequency.exponentialRampToValueAtTime(Math.max(1,bendTo),t+dur);env(o,t,0.006,peak,dur).connect(master);o.start(t);o.stop(t+dur+0.05);return o;}
+    function mkOscF(type,f,t,dur,peak,bendTo,ftype,cut,Q){const o=ctx.createOscillator();o.type=type;o.frequency.setValueAtTime(f,t);if(bendTo)o.frequency.exponentialRampToValueAtTime(Math.max(1,bendTo),t+dur);const flt=ctx.createBiquadFilter();flt.type=ftype;flt.frequency.value=cut;if(Q)flt.Q.value=Q;o.connect(flt);env(flt,t,0.006,peak,dur).connect(master);o.start(t);o.stop(t+dur+0.05);return o;}
+    function nburst(t,dur,peak,ftype,cut,Q){const s=ctx.createBufferSource();s.buffer=noise(dur+0.02);const flt=ctx.createBiquadFilter();flt.type=ftype;flt.frequency.value=cut;if(Q)flt.Q.value=Q;s.connect(flt);env(flt,t,0.004,peak,dur).connect(master);s.start(t);s.stop(t+dur+0.05);return s;}
+    function swell(t,dur,peak,ftype,cut,Q){const s=ctx.createBufferSource();s.buffer=noise(dur+0.05);const flt=ctx.createBiquadFilter();flt.type=ftype;flt.frequency.value=cut;if(Q)flt.Q.value=Q;const g=ctx.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(peak,t+dur*0.4);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);s.connect(flt);flt.connect(g);g.connect(master);s.start(t);s.stop(t+dur+0.05);return s;}
+
+    /* --- Sci-Fi pack (original; not actual Star Wars audio) --- */
+    function sfPew(t){mkOscF('sawtooth',1800,t,0.12,0.3,300,'lowpass',2600);nburst(t,0.05,0.14,'bandpass',2000,1);}
+    function sfHit(t){mkOscF('sawtooth',1400,t,0.13,0.26,220,'lowpass',2200);mkOsc('sine',120,t+0.05,0.18,0.4,60);}
+    function sfFoul(t){mkOscF('sawtooth',180,t,0.4,0.24,90,'lowpass',700);mkOscF('sawtooth',184,t,0.4,0.2,92,'lowpass',700);}
+    function sfTap(t){mkOsc('sine',500,t,0.08,0.2,900);}
+    function sfUndo(t){mkOsc('sawtooth',300,t,0.16,0.2,820);}
+    function sfRack(t){mkOscF('square',200,t,0.32,0.18,1300,'lowpass',1900);}
+    function sfBrass(f,t,dur,peak){mkOscF('sawtooth',f,t,dur,peak||0.22,null,'lowpass',2000);mkOscF('sawtooth',f*1.004,t,dur,(peak||0.22)*0.55,null,'lowpass',2000);}
+    function sfWin(t){sfBrass(392,t,0.14);sfBrass(523,t+0.14,0.14);sfBrass(659,t+0.28,0.14);sfBrass(523,t+0.42,0.6,0.18);sfBrass(784,t+0.42,0.62,0.22);}
+
+    /* --- Jazz Age pack (1920s, original) --- */
+    function jzPiano(f,t,dur,peak){mkOsc('triangle',f,t,dur||0.18,peak||0.22);}
+    function jzStab(f,t,dur,peak){const o=ctx.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(f,t);const flt=ctx.createBiquadFilter();flt.type='lowpass';flt.frequency.setValueAtTime(500,t);flt.frequency.exponentialRampToValueAtTime(2200,t+dur*0.4);flt.frequency.exponentialRampToValueAtTime(700,t+dur);flt.Q.value=4;o.connect(flt);env(flt,t,0.01,peak||0.26,dur).connect(master);o.start(t);o.stop(t+dur+0.05);}
+    function jzTromb(f1,f2,t,dur){const o=ctx.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(f1,t);o.frequency.exponentialRampToValueAtTime(f2,t+dur);const flt=ctx.createBiquadFilter();flt.type='lowpass';flt.frequency.value=900;flt.Q.value=2;o.connect(flt);env(flt,t,0.02,0.28,dur).connect(master);o.start(t);o.stop(t+dur+0.05);}
+    function jzTap(t){nburst(t,0.03,0.22,'bandpass',1200,3);mkOsc('triangle',1500,t,0.04,0.12);}
+    function jzUndo(t){[784,659,523].forEach((f,i)=>jzPiano(f,t+i*0.05,0.12));}
+    function jzRack(t){[392,523,659,784,1047].forEach((f,i)=>jzPiano(f,t+i*0.05,0.12));}
+    function jzWin(t){[523,659,784].forEach((f,i)=>jzStab(f,t+i*0.1,0.18,0.2));jzStab(523,t+0.32,0.5,0.16);jzStab(880,t+0.32,0.5,0.2);nburst(t+0.32,0.4,0.1,'highpass',6000);}
+
+    /* --- Darts pack (original) --- */
+    function dtThunk(t,peak){mkOsc('sine',180,t,0.12,peak||0.4,90);nburst(t,0.06,0.24,'lowpass',600);mkOsc('triangle',2400,t,0.03,0.1);}
+    function dtDing(t){mkOsc('sine',1320,t,0.12,0.3);mkOsc('sine',1760,t+0.07,0.16,0.26);}
+    function dtFoul(t){mkOscF('square',140,t,0.35,0.26,null,'lowpass',900);mkOscF('square',146,t,0.35,0.18,null,'lowpass',900);}
+    function dtUndo(t){nburst(t,0.12,0.18,'bandpass',1800,0.8);}
+    function dtRack(t){dtThunk(t);dtThunk(t+0.12);dtThunk(t+0.24);}
+    function dtWin(t){mkOsc('sine',1320,t,0.15,0.22,1760);swell(t,1.0,0.28,'bandpass',1500,0.6);swell(t,1.0,0.16,'lowpass',800);mkOsc('sine',2000,t+0.25,0.3,0.07,2600);mkOsc('sine',2400,t+0.45,0.3,0.06,3000);}
+
+    const packs={
+      classic:{click:bClick,pot:bPot,foul:bFoul,tap:bTap,undo:bUndo,rack:bRack,win:bWin,inoff:t=>{bClick(t);bPot(t+0.07);}},
+      arcade:{click:aJump,pot:aBlip,foul:aFoul,tap:aTap,undo:aUndo,rack:aRack,win:aWin,inoff:t=>{aJump(t);aBlip(t+0.16);}},
+      scifi:{click:sfPew,pot:sfHit,foul:sfFoul,tap:sfTap,undo:sfUndo,rack:sfRack,win:sfWin,inoff:t=>{sfPew(t);sfHit(t+0.09);}},
+      jazz:{click:t=>{jzPiano(880,t,0.08);jzPiano(1175,t+0.05,0.14);},pot:t=>jzStab(523,t,0.28),foul:t=>{jzTromb(330,247,t,0.28);jzTromb(247,196,t+0.28,0.4);},tap:jzTap,undo:jzUndo,rack:jzRack,win:jzWin,inoff:t=>{jzPiano(880,t,0.08);jzStab(523,t+0.08,0.26);}},
+      darts:{click:t=>dtThunk(t),pot:dtDing,foul:dtFoul,tap:t=>dtThunk(t,0.26),undo:dtUndo,rack:dtRack,win:dtWin,inoff:t=>{dtThunk(t);dtDing(t+0.1);}}
+    };
+    function play(name){if(!on||!ensure())return;const t=ctx.currentTime+0.001;const p=packs[pack];const fn=p&&p[name];if(fn)fn(t);}
     return{play,resume:ensure,toggle(){on=!on;if(on){ensure();play('tap');}return on;},isOn:()=>on,
-      cyclePack(){pack=(pack==='arcade'?'billiards':'arcade');ensure();play('pot');return pack;},getPack:()=>pack};
+      setPack(id){if(packs[id]){pack=id;ensure();play('pot');}return pack;},getPack:()=>pack};
   })();
 
   /* ---------- wake lock ---------- */
@@ -546,7 +596,13 @@
     else{const x=document.exitFullscreen||document.webkitExitFullscreen;if(x){try{x.call(document);}catch(e){}}}}
 
   /* ---------- labels ---------- */
-  function packLabel(){document.getElementById('packName').textContent=Sound.getPack()==='arcade'?'Arcade':'Classic';}
+  const PACKS=[['arcade','Arcade'],['scifi','Sci-Fi'],['jazz','Jazz Age'],['darts','Darts'],['classic','Classic']];
+  function packName(id){const p=PACKS.find(x=>x[0]===id);return p?p[1]:id;}
+  function packLabel(){document.getElementById('packName').textContent=packName(Sound.getPack());}
+  function openPicker(){const list=document.getElementById('packList');
+    list.innerHTML=PACKS.map(([id,nm])=>`<button class="ctrl pack-opt${Sound.getPack()===id?' sel':''}" data-pack="${id}">${nm}</button>`).join('');
+    document.getElementById('soundPicker').classList.add('show');}
+  function closePicker(){document.getElementById('soundPicker').classList.remove('show');}
   function awakeLabel(){const b=document.getElementById('awakeBtn'),nm=document.getElementById('awakeName');
     if(!Wake.isSupported()){b.classList.remove('active');nm.textContent='—';
       b.title='Keep-awake isn\u2019t available here. Add to Home Screen, or set Settings \u203a Display & Brightness \u203a Auto-Lock to Never.';return;}
@@ -561,7 +617,9 @@
     if(e.target.closest('#confirmNo')){closeConfirm();return;}
     if(e.target.closest('#fsBtn')){toggleFullscreen();return;}
     if(e.target.closest('#awakeBtn')){Wake.set(!Wake.isWanted()).then(awakeLabel);return;}
-    if(e.target.closest('#packBtn')){Sound.cyclePack();packLabel();return;}
+    if(e.target.closest('#packBtn')){openPicker();return;}
+    if(e.target.closest('.pack-opt')){const id=e.target.closest('.pack-opt').dataset.pack;Sound.setPack(id);packLabel();document.querySelectorAll('.pack-opt').forEach(b=>b.classList.toggle('sel',b.dataset.pack===id));return;}
+    if(e.target.closest('#pickerDone')||e.target.id==='soundPicker'){closePicker();return;}
     const sb=e.target.closest('#soundBtn');if(sb){const on=Sound.toggle();sb.classList.toggle('muted',!on);return;}
 
     if(e.target.closest('#rematchBtn')){startMatch(lastConfig);return;}
