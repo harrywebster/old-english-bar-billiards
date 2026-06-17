@@ -6,10 +6,10 @@ entirely in the browser from a single HTML file — no build step, no server-sid
 code, no dependencies to install, and no network connection required once the
 page has loaded.
 
-The whole app lives in [`public_html/index.html`](public_html/index.html):
-markup, styling and game logic are bundled into one file so it can be dropped
-onto any static web host (hence the `public_html` directory) or simply opened
-straight from disk.
+The whole app lives in [`index.html`](index.html): markup, styling and game
+logic are bundled into one file so it can be dropped onto any static web host —
+including GitHub Pages, which serves it straight from the repository root — or
+simply opened from disk.
 
 ---
 
@@ -62,11 +62,11 @@ type any number.
 
 ### Opening it
 
-- **Locally:** open `public_html/index.html` in any modern browser
-  (double-click it, or drag it onto a browser window).
-- **Hosted:** upload the contents of `public_html/` to any static web host
-  (the directory is named `public_html` so it works out of the box on most
-  shared hosting). Then visit the page.
+- **Locally:** open `index.html` in any modern browser (double-click it, or
+  drag it onto a browser window).
+- **Hosted:** upload `index.html` to any static web host, or enable **GitHub
+  Pages** for the repository — because the file sits at the root, Pages serves
+  it as the site's home page with no extra configuration. Then visit the page.
 - **As an app:** on iOS/Android, use *Add to Home Screen* to launch it
   full-screen like a native app.
 
@@ -115,9 +115,9 @@ set up a **New match**.
 
 ## Technical notes
 
-- **Single file, zero dependencies.** Everything is inline in
-  `public_html/index.html`. The only external resources are Google Fonts, which
-  are optional — the page falls back to system fonts if they can't load.
+- **Single file, zero dependencies.** Everything is inline in `index.html`. The
+  only external resources are Google Fonts, which are optional — the page falls
+  back to system fonts if they can't load.
 - **No data is stored or transmitted.** All state lives in memory for the
   duration of the match; refreshing the page starts over.
 - **Progressive enhancement.** Wake-lock, full-screen and the Web Audio API are
@@ -151,8 +151,7 @@ dev dependencies are only for running the tests.
 
 ```
 .
-├── public_html/
-│   └── index.html         # the entire application (no build step)
+├── index.html             # the entire application (no build step)
 ├── tests/
 │   └── billiards.spec.js  # Playwright end-to-end tests
 ├── playwright/

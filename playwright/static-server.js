@@ -1,11 +1,11 @@
 // Zero-dependency static file server for the test run.
-// Serves the contents of public_html/ (the entire app) so Playwright can
-// drive the page over http:// exactly as a real static host would.
+// Serves the repo root (where index.html lives) so Playwright drives the page
+// over http:// exactly as GitHub Pages serves it from the root of the site.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
-const root = path.join(__dirname, '..', 'public_html');
+const root = path.join(__dirname, '..');
 const port = process.env.PORT || 8123;
 const types = {
   '.html': 'text/html; charset=utf-8',
